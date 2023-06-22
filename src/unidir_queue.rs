@@ -13,17 +13,21 @@ pub fn unidirectional_queue() -> (MessageSender, MessageReceiver) {
     let is_active = Arc::new(AtomicBool::new(true));
 
     let msg_send = MessageSender {
-        send,
+        send: Arc::new(send),
         is_active: Arc::clone(&is_active),
     };
-    let msg_recv = MessageReceiver { recv, is_active };
+    let msg_recv = MessageReceiver {
+        recv: Arc::new(recv),
+        is_active
+    };
 
     (msg_send, msg_recv)
 }
 
 /// The sending-half of the message queue.
+#[derive(Clone)]
 pub struct MessageSender {
-    send: Sender<Arc<dyn Message>>,
+    send: Arc<Sender<Arc<dyn Message>>>,
     pub(crate) is_active: Arc<AtomicBool>,
 }
 
@@ -63,8 +67,9 @@ impl MessageSender {
 }
 
 /// The receiving-half of the message queue.
+#[derive(Clone)]
 pub struct MessageReceiver {
-    recv: Receiver<Arc<dyn Message>>,
+    recv: Arc<Receiver<Arc<dyn Message>>>,
     pub(crate) is_active: Arc<AtomicBool>,
 }
 

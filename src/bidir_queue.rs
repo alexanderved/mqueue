@@ -26,6 +26,7 @@ pub fn bidirectional_queue() -> (MessageEndpoint, MessageEndpoint) {
 }
 
 /// The half of the bidirectional queue which can be used both for sending and receiving messages.
+#[derive(Clone)]
 pub struct MessageEndpoint {
     input: MessageReceiver,
     output: MessageSender,
