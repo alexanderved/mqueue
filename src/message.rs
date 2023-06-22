@@ -4,14 +4,14 @@ use std::sync::Arc;
 use crate::*;
 
 /// A type which is used for communicating between publishers and subscribers.
-pub trait Message: util::AsAnyArc + Send + Sync + 'static {}
+pub trait Message: util::AsAnyRef + util::AsAnyArc + Send + Sync + 'static {
+    /// Returns the type id of the message.
+    fn type_id(&self) -> MessageTypeId {
+        MessageTypeId(self.as_any_ref().type_id())
+    }
+}
 
 impl dyn Message {
-    /// Returns the type id of the message.
-    pub fn type_id(&self) -> MessageTypeId {
-        MessageTypeId(std::any::Any::type_id(self))
-    }
-
     /// Attempts to downcast [`Arc<dyn Message>`] to a concrete type.
     ///
     /// [`Arc<dyn Message>`]: Message

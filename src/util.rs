@@ -51,3 +51,15 @@ impl<T: Send + Sync + 'static> AsAnyArc for T {
         self
     }
 }
+
+#[doc(hidden)]
+pub trait AsAnyRef: 'static {
+    #[doc(hidden)]
+    fn as_any_ref(&self) -> &dyn Any;
+}
+
+impl<T: 'static> AsAnyRef for T {
+    fn as_any_ref(&self) -> &dyn Any {
+        self
+    }
+}
