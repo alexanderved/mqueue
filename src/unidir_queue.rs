@@ -1,7 +1,7 @@
 use crate::*;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
+use crossbeam_channel::{self, Receiver, Sender};
 use std::sync::Arc;
 
 /// Creates a new unidirectional message queue for dynamically typed messages.
@@ -9,7 +9,7 @@ use std::sync::Arc;
 /// A unidirectional queue is a queue where there is a flow of messages
 /// which is directed only in one direction, from sender to receiver.
 pub fn unidirectional_queue_dyn() -> (DynMessageSender, DynMessageReceiver) {
-    let (send, recv) = mpsc::channel();
+    let (send, recv) = crossbeam_channel::unbounded();
     let is_active = Arc::new(AtomicBool::new(true));
 
     let msg_send = DynMessageSender {
@@ -125,15 +125,15 @@ pub(crate) fn synchronize_dyn_queues_activity(
 /// A unidirectional queue is a queue where there is a flow of messages
 /// which is directed only in one direction, from sender to receiver.
 pub fn unidirectional_queue<M: Message>() -> (MessageSender<M>, MessageReceiver<M>) {
-    let (send, recv) = mpsc::channel();
+    let (send, recv) = crossbeam_channel::unbounded();
     let is_active = Arc::new(AtomicBool::new(true));
 
     let msg_send = MessageSender {
-        send: send,
+        send,
         is_active: Arc::clone(&is_active),
     };
     let msg_recv = MessageReceiver {
-        recv: Arc::new(recv),
+        recv,
         is_active,
     };
 
@@ -185,7 +185,7 @@ impl<M: Message> MessageSender<M> {
 /// The receiving-half of the message queue for statically typed messages.
 #[derive(Clone)]
 pub struct MessageReceiver<M> {
-    recv: Arc<Receiver<Arc<M>>>,
+    recv: Receiver<Arc<M>>,
     pub(crate) is_active: Arc<AtomicBool>,
 }
 
