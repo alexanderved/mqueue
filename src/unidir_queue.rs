@@ -13,11 +13,11 @@ pub fn unidirectional_queue_dyn() -> (DynMessageSender, DynMessageReceiver) {
     let is_active = Arc::new(AtomicBool::new(true));
 
     let msg_send = DynMessageSender {
-        send: send,
+        send,
         is_active: Arc::clone(&is_active),
     };
     let msg_recv = DynMessageReceiver {
-        recv: Arc::new(recv),
+        recv,
         is_active,
     };
 
@@ -69,7 +69,7 @@ impl DynMessageSender {
 /// The receiving-half of the message queue for dynamically typed messages.
 #[derive(Clone)]
 pub struct DynMessageReceiver {
-    recv: Arc<Receiver<Arc<dyn Message>>>,
+    recv: Receiver<Arc<dyn Message>>,
     pub(crate) is_active: Arc<AtomicBool>,
 }
 
@@ -141,7 +141,6 @@ pub fn unidirectional_queue<M: Message>() -> (MessageSender<M>, MessageReceiver<
 }
 
 /// The sending-half of the message queue for statically typed messages.
-#[derive(Clone)]
 pub struct MessageSender<M> {
     send: Sender<Arc<M>>,
     pub(crate) is_active: Arc<AtomicBool>,
@@ -182,8 +181,16 @@ impl<M: Message> MessageSender<M> {
     }
 }
 
+impl<M> Clone for MessageSender<M> {
+    fn clone(&self) -> Self {
+        Self {
+            send: self.send.clone(),
+            is_active: self.is_active.clone(),
+        }
+    }
+}
+
 /// The receiving-half of the message queue for statically typed messages.
-#[derive(Clone)]
 pub struct MessageReceiver<M> {
     recv: Receiver<Arc<M>>,
     pub(crate) is_active: Arc<AtomicBool>,
@@ -224,6 +231,15 @@ impl<M: Message> MessageReceiver<M> {
     /// Returns an iterator which yields all pending messages.
     pub fn iter(&self) -> MessageIter<'_, M> {
         MessageIter { msg_recv: self }
+    }
+}
+
+impl<M> Clone for MessageReceiver<M> {
+    fn clone(&self) -> Self {
+        Self {
+            recv: self.recv.clone(),
+            is_active: self.is_active.clone(),
+        }
     }
 }
 

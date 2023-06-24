@@ -172,7 +172,6 @@ pub fn bidirectional_queue<A: Message, B: Message>(
 
 /// The half of the bidirectional queue which can be used both
 /// for sending and receiving statically typed messages.
-#[derive(Clone)]
 pub struct MessageEndpoint<In, Out> {
     input: MessageReceiver<In>,
     output: MessageSender<Out>,
@@ -225,6 +224,15 @@ impl<In: Message, Out: Message> MessageEndpoint<In, Out> {
     /// Returns an iterator which yields all pending messages.
     pub fn iter(&self) -> MessageIter<'_, In> {
         self.as_receiver().iter()
+    }
+}
+
+impl<In, Out> Clone for MessageEndpoint<In, Out> {
+    fn clone(&self) -> Self {
+        Self {
+            input: self.input.clone(),
+            output: self.output.clone(),
+        }
     }
 }
 
@@ -288,6 +296,14 @@ impl<In: Message, Out: Message> MessageEndpoints<In, Out> {
     pub fn iter(&self) -> AbstractMessageIter<impl MessageIterator + '_> {
         AbstractMessageIter {
             iter: self.map.values().flat_map(|end| end.iter()),
+        }
+    }
+}
+
+impl<In, Out> Clone for MessageEndpoints<In, Out> {
+    fn clone(&self) -> Self {
+        Self {
+            map: self.map.clone(),
         }
     }
 }
