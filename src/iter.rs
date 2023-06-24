@@ -29,11 +29,11 @@ pub trait MessageIterator: Iterator<Item = Arc<dyn Message>> {
 
 impl<I: Iterator<Item = Arc<dyn Message>>> MessageIterator for I {}
 
-/// An iterator which yields messages from one [`MessageReceiver`].
+/// An iterator which yields messages from one [`DynMessageReceiver`].
 ///
-/// This `struct` is created by [`MessageReceiver::iter`] or [`MessageEndpoint::iter`].
+/// This `struct` is created by [`DynMessageReceiver::iter`] or [`MessageEndpoint::iter`].
 pub struct MessageIter<'r> {
-    pub(crate) msg_recv: &'r MessageReceiver,
+    pub(crate) msg_recv: &'r DynMessageReceiver,
 }
 
 impl Iterator for MessageIter<'_> {

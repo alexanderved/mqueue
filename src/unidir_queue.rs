@@ -8,15 +8,15 @@ use std::sync::Arc;
 ///
 /// A unidirectional queue is a queue where there is a flow of messages
 /// which is directed only in one direction, from sender to receiver.
-pub fn unidirectional_queue() -> (MessageSender, MessageReceiver) {
+pub fn unidirectional_queue_dyn() -> (DynMessageSender, DynMessageReceiver) {
     let (send, recv) = mpsc::channel();
     let is_active = Arc::new(AtomicBool::new(true));
 
-    let msg_send = MessageSender {
-        send: Arc::new(send),
+    let msg_send = DynMessageSender {
+        send: send,
         is_active: Arc::clone(&is_active),
     };
-    let msg_recv = MessageReceiver {
+    let msg_recv = DynMessageReceiver {
         recv: Arc::new(recv),
         is_active
     };
@@ -24,37 +24,37 @@ pub fn unidirectional_queue() -> (MessageSender, MessageReceiver) {
     (msg_send, msg_recv)
 }
 
-/// The sending-half of the message queue.
+/// The sending-half of the message queue for dynamically typed messages.
 #[derive(Clone)]
-pub struct MessageSender {
-    send: Arc<Sender<Arc<dyn Message>>>,
+pub struct DynMessageSender {
+    send: Sender<Arc<dyn Message>>,
     pub(crate) is_active: Arc<AtomicBool>,
 }
 
-impl MessageSender {
-    /// Returns the id of the queue which the [`MessageSender`] is part of.
+impl DynMessageSender {
+    /// Returns the id of the queue which the [`DynMessageSender`] is part of.
     pub fn queue_id(&self) -> QueueId {
-        // The pointer which is stored in `MessageSender::is_active` is unique
+        // The pointer which is stored in `DynMessageSender::is_active` is unique
         // for each queue, so it can be used as id.
         QueueId::new(self.is_active.as_ref() as *const _ as usize)
     }
 
-    /// Returns if the [`MessageSender`] is active.
+    /// Returns if the [`DynMessageSender`] is active.
     pub fn is_active(&self) -> bool {
         self.is_active.load(Ordering::SeqCst)
     }
 
-    /// Activates the [`MessageSender`].
+    /// Activates the [`DynMessageSender`].
     pub fn activate(&self) {
         self.is_active.store(true, Ordering::SeqCst);
     }
 
-    /// Deactivates the [`MessageSender`].
+    /// Deactivates the [`DynMessageSender`].
     pub fn deactivate(&self) {
         self.is_active.store(false, Ordering::SeqCst);
     }
 
-    /// Sends message to the queue if the [`MessageSender`] is active.
+    /// Sends message to the queue if the [`DynMessageSender`] is active.
     pub fn send(&self, msg: Arc<dyn Message>) -> Result<(), MessagingError> {
         if !self.is_active() {
             return Err(MessagingError::QueueNotActive);
@@ -68,35 +68,35 @@ impl MessageSender {
 
 /// The receiving-half of the message queue.
 #[derive(Clone)]
-pub struct MessageReceiver {
+pub struct DynMessageReceiver {
     recv: Arc<Receiver<Arc<dyn Message>>>,
     pub(crate) is_active: Arc<AtomicBool>,
 }
 
-impl MessageReceiver {
-    /// Returns the id of the queue which the [`MessageReceiver`] is part of.
+impl DynMessageReceiver {
+    /// Returns the id of the queue which the [`DynMessageReceiver`] is part of.
     pub fn queue_id(&self) -> QueueId {
         // The pointer which is stored in `MessageReceiver::is_active` is unique
         // for each queue, so it can be used as id.
         QueueId::new(self.is_active.as_ref() as *const _ as usize)
     }
 
-    /// Returns if the [`MessageReceiver`] is active.
+    /// Returns if the [`DynMessageReceiver`] is active.
     pub fn is_active(&self) -> bool {
         self.is_active.load(Ordering::SeqCst)
     }
 
-    /// Activates the [`MessageReceiver`].
+    /// Activates the [`DynMessageReceiver`].
     pub fn activate(&self) {
         self.is_active.store(true, Ordering::SeqCst);
     }
 
-    /// Deactivates the [`MessageReceiver`].
+    /// Deactivates the [`DynMessageReceiver`].
     pub fn deactivate(&self) {
         self.is_active.store(false, Ordering::SeqCst);
     }
 
-    /// Receives one message if there is any and the [`MessageReceiver`] is active.
+    /// Receives one message if there is any and the [`DynMessageReceiver`] is active.
     pub fn recv(&self) -> Option<Arc<dyn Message>> {
         if !self.is_active() {
             return None;
@@ -113,8 +113,8 @@ impl MessageReceiver {
 
 // Makes two queues activate and deactivate at the same time.
 pub(crate) fn synchronize_queues_activity(
-    dst_queue: (&mut MessageSender, &mut MessageReceiver),
-    src_queue: (&MessageSender, &MessageReceiver),
+    dst_queue: (&mut DynMessageSender, &mut DynMessageReceiver),
+    src_queue: (&DynMessageSender, &DynMessageReceiver),
 ) {
     dst_queue.0.is_active = Arc::clone(&src_queue.0.is_active);
     dst_queue.1.is_active = Arc::clone(&src_queue.1.is_active);
