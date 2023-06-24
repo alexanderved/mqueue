@@ -40,6 +40,16 @@ macro_rules! match_message {
     };
 }
 
+/// An iterator that can be evaluated without performing any extra activity.
+pub trait IteratorRun: Iterator + Sized {
+    /// Runs an iterator.
+    fn run(self) {
+        self.for_each(|_| {});
+    }
+}
+
+impl<I: Iterator> IteratorRun for I {}
+
 #[doc(hidden)]
 pub trait AsAnyArc: Send + Sync + 'static {
     #[doc(hidden)]
