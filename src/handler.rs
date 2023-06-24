@@ -15,7 +15,7 @@ pub trait MessageHandler {
 /// which accepts a message.
 pub struct MessageHandlerFunction<M: ?Sized, F> {
     f: F,
-    _marker: PhantomData<fn(Arc<M>)>,
+    _marker: PhantomData<fn() -> Arc<M>>,
 }
 
 impl<M: Message, F: FnMut(Arc<M>)> MessageHandler for MessageHandlerFunction<M, F> {
