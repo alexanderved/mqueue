@@ -1,7 +1,7 @@
 use crate::*;
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use crossbeam_channel::{self, Receiver, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 /// Creates a new unidirectional message queue for dynamically typed messages.
@@ -16,10 +16,7 @@ pub fn unidirectional_queue_dyn() -> (DynMessageSender, DynMessageReceiver) {
         send,
         is_active: Arc::clone(&is_active),
     };
-    let msg_recv = DynMessageReceiver {
-        recv,
-        is_active,
-    };
+    let msg_recv = DynMessageReceiver { recv, is_active };
 
     (msg_send, msg_recv)
 }
@@ -109,6 +106,36 @@ impl DynMessageReceiver {
     pub fn iter(&self) -> DynMessageIter<'_> {
         DynMessageIter { msg_recv: self }
     }
+
+    /// Receives one message and forwards it into another queue.
+    pub fn forward_one<M, N>(&self, next: DynMessageSender) -> Result<(), MessagingError>
+    where
+        M: Message,
+        N: Message + From<Arc<M>>,
+    {
+        let Some(msg) = self.recv() else {
+            return Ok(());
+        };
+        let msg = match msg.downcast::<M>() {
+            Ok(msg) => msg,
+            Err(err_msg) => return Err(MessagingError::WrongMessageType(err_msg)),
+        };
+
+        next.send(Arc::new(N::from(msg)))
+    }
+
+    /// Forwards all pending messages into another queue.
+    pub fn forward<M, N>(&self, next: DynMessageSender)
+    where
+        M: Message,
+        N: Message + From<Arc<M>>,
+    {
+        self.iter()
+            .handle(|msg: Arc<M>| {
+                let _ = next.send(Arc::new(N::from(msg)));
+            })
+            .run();
+    }
 }
 
 // Makes two dyn queues activate and deactivate at the same time.
@@ -132,10 +159,7 @@ pub fn unidirectional_queue<M: Message>() -> (MessageSender<M>, MessageReceiver<
         send,
         is_active: Arc::clone(&is_active),
     };
-    let msg_recv = MessageReceiver {
-        recv,
-        is_active,
-    };
+    let msg_recv = MessageReceiver { recv, is_active };
 
     (msg_send, msg_recv)
 }
@@ -231,6 +255,25 @@ impl<M: Message> MessageReceiver<M> {
     /// Returns an iterator which yields all pending messages.
     pub fn iter(&self) -> MessageIter<'_, M> {
         MessageIter { msg_recv: self }
+    }
+
+    /// Receives one message and forwards it into another queue.
+    pub fn forward_one<N>(&self, next: MessageSender<N>) -> Result<(), MessagingError>
+    where
+        N: Message + From<Arc<M>>,
+    {
+        self.recv()
+            .map_or(Ok(()), |msg| next.send(Arc::new(msg.into())))
+    }
+
+    /// Forwards all pending messages into another queue.
+    pub fn forward<N>(&self, next: MessageSender<N>)
+    where
+        N: Message + From<Arc<M>>,
+    {
+        self.iter().for_each(|msg| {
+            let _ = next.send(Arc::new(msg.into()));
+        });
     }
 }
 

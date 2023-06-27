@@ -81,6 +81,25 @@ impl DynMessageEndpoint {
     pub fn iter(&self) -> DynMessageIter<'_> {
         self.as_receiver().iter()
     }
+
+    /// Receives one message and forwards it into another queue.
+    pub fn forward_one<M, N>(&self, next: DynMessageEndpoint) -> Result<(), MessagingError>
+    where
+        M: Message,
+        N: Message + From<Arc<M>>,
+    {
+        self.as_receiver()
+            .forward_one::<M, N>(next.as_sender().clone())
+    }
+
+    /// Forwards all pending messages into another queue.
+    pub fn forward<M, N>(&self, next: DynMessageEndpoint)
+    where
+        M: Message,
+        N: Message + From<Arc<M>>,
+    {
+        self.as_receiver().forward::<M, N>(next.as_sender().clone());
+    }
 }
 
 /// A set of [`DynMessageEndpoint`]s which can be used to manipulate them simultaneously.
@@ -224,6 +243,24 @@ impl<In: Message, Out: Message> MessageEndpoint<In, Out> {
     /// Returns an iterator which yields all pending messages.
     pub fn iter(&self) -> MessageIter<'_, In> {
         self.as_receiver().iter()
+    }
+
+    /// Receives one message and forwards it into another queue.
+    pub fn forward_one<Any, N>(&self, next: MessageEndpoint<Any, N>) -> Result<(), MessagingError>
+    where
+        Any: Message,
+        N: Message + From<Arc<In>>,
+    {
+        self.as_receiver().forward_one(next.as_sender().clone())
+    }
+
+    /// Forwards all pending messages into another queue.
+    pub fn forward<Any, N>(&self, next: MessageEndpoint<Any, N>)
+    where
+        Any: Message,
+        N: Message + From<Arc<In>>,
+    {
+        self.as_receiver().forward(next.as_sender().clone());
     }
 }
 
