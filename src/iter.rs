@@ -77,11 +77,10 @@ pub trait MessageIterator: Iterator<Item = Arc<Self::Message>> + IteratorRun {
 
     /// Takes a message handler and creates an iterator which
     /// calls that message handler on each received message
-    fn handle<M, F>(self, f: F) -> HandleMessage<Self, F>
+    fn handle<F>(self, f: F) -> HandleMessage<Self, F>
     where
         Self: Sized,
-        M: Message,
-        F: FnMut(Arc<M>),
+        F: FnMut(Arc<Self::Message>),
     {
         HandleMessage { iter: self, f: f }
     }
