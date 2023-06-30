@@ -1,6 +1,6 @@
 [package]
 name = "mueue"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 description = "A simple implementation of message queues"
 authors = ["Alexander Vedekhin"]
@@ -13,3 +13,4 @@ readme = "README.md"
 
 [dependencies]
 crossbeam-channel = "0.5.8"
+crossbeam-utils = "0.8.16"

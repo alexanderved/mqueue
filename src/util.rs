@@ -1,6 +1,7 @@
 use std::any::Any;
 use std::sync::Arc;
-use std::cell::Cell;
+
+use crossbeam_utils::atomic::AtomicCell;
 
 /// An id of a queue.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -53,23 +54,23 @@ impl<I: Iterator> IteratorRun for I {}
 
 /// A wrapper which allows to mutate the contained value and take it from
 /// an immutable memory location.
-pub struct Packet<T>(Cell<Option<T>>);
+pub struct Packet<T>(AtomicCell<Option<T>>);
 
 impl<T> Packet<T> {
     /// Creates a new [`Packet`].
     pub fn new(val: T) -> Self {
-        Self(Cell::new(Some(val)))
+        Self(AtomicCell::new(Some(val)))
     }
 
     /// Sets the contained value.
     pub fn set(&self, val: T) {
-        self.0.set(Some(val));
+        self.0.store(Some(val));
     }
 
     /// Replcaes the contained value with `val` and returns
     /// the old contained value if there is any.
     pub fn replace(&self, val: T) -> Option<T> {
-        self.0.replace(Some(val))
+        self.0.swap(Some(val))
     }
 
     /// Takes the contained value if there is any.
@@ -81,7 +82,7 @@ impl<T> Packet<T> {
     pub fn update<F: FnOnce(&mut T)>(&self, f: F) {
         let mut val = self.0.take();
         val.as_mut().map(f);
-        self.0.set(val);
+        self.0.store(val);
     }
 }
 
