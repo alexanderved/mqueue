@@ -2,7 +2,7 @@ use crate::*;
 
 use std::collections::HashMap;
 
-/// Creates a new bidirectional message queue for messages.
+/// Creates a new unbounded bidirectional message queue for messages.
 ///
 /// A bidirectional queue is a queue where there are two flows of messages which are
 /// directed in opposite directions. It lets two objects communicate with each other.
@@ -10,6 +10,30 @@ pub fn bidirectional_queue<A: Message, B: Message>(
 ) -> (MessageEndpoint<A, B>, MessageEndpoint<B, A>) {
     let (send1, recv1) = unidirectional_queue();
     let (mut send2, mut recv2) = unidirectional_queue();
+
+    synchronize_queues_activity((&mut send2, &mut recv2), (&send1, &recv1));
+
+    let end1 = MessageEndpoint {
+        input: recv1,
+        output: send2,
+    };
+    let end2 = MessageEndpoint {
+        input: recv2,
+        output: send1,
+    };
+
+    (end1, end2)
+}
+
+/// Creates a new bounded bidirectional message queue for messages.
+///
+/// A bidirectional queue is a queue where there are two flows of messages which are
+/// directed in opposite directions. It lets two objects communicate with each other.
+pub fn bidirectional_queue_bounded<A: Message, B: Message>(
+    cap: usize,
+) -> (MessageEndpoint<A, B>, MessageEndpoint<B, A>) {
+    let (send1, recv1) = unidirectional_queue_bounded(cap);
+    let (mut send2, mut recv2) = unidirectional_queue_bounded(cap);
 
     synchronize_queues_activity((&mut send2, &mut recv2), (&send1, &recv1));
 
@@ -40,45 +64,50 @@ impl<In: Message, Out: Message> MessageEndpoint<In, Out> {
     }
 
     /// Converts the [`MessageEndpoint`] to a [`MessageSender`].
-    pub fn as_sender(&self) -> &MessageSender<Out> {
-        &self.output
+    pub fn as_sender(&self) -> MessageSender<Out> {
+        self.output.clone()
     }
 
     /// Converts the [`MessageEndpoint`] to a [`MessageReceiver`].
-    pub fn as_receiver(&self) -> &MessageReceiver<In> {
-        &self.input
+    pub fn as_receiver(&self) -> MessageReceiver<In> {
+        self.input.clone()
     }
 
-    /// Returns if the [`MessageEndpoint`] is active.
+    /// Returns if the message queue is active.
     pub fn is_active(&self) -> bool {
         self.as_sender().is_active() && self.as_receiver().is_active()
     }
 
-    /// Activates the [`MessageEndpoint`].
+    /// Returns the capacity if the queue is bounded.
+    pub fn capacity(&self) -> Option<usize> {
+        self.input.capacity()
+    }
+
+    /// Activates the message queue.
     pub fn activate(&self) {
         self.input.activate();
         self.output.activate();
     }
 
-    /// Deactivates the [`MessageEndpoint`].
+    /// Deactivates the message queue.
     pub fn deactivate(&self) {
         self.input.deactivate();
         self.output.deactivate();
     }
 
-    /// Sends message to the queue if the [`MessageEndpoint`] is active.
+    /// Sends message to the queue if the message queue is active.
     pub fn send(&self, msg: Out) -> Result<(), MessagingError> {
         self.as_sender().send(msg)
     }
 
-    /// Receives one message if there is any and the [`MessageEndpoint`] is active.
+    /// Receives one message if there is any and the message queue is active.
     pub fn recv(&self) -> Option<In> {
-        self.as_receiver().recv()
+        self.input.recv()
     }
 
     /// Returns an iterator which yields all pending messages.
     pub fn iter(&self) -> MessageIter<'_, In> {
-        self.as_receiver().iter()
+        self.input.iter()
     }
 
     /// Receives one message and forwards it into another queue.
@@ -169,9 +198,7 @@ impl<In: Message, Out: Message> MessageEndpoints<In, Out> {
 impl<In: Message, Out: Message + Clone> MessageEndpoints<In, Out> {
     /// Sends the given message to all stored [`MessageEndpoint`]s.
     pub fn send(&self, msg: Out) -> Result<(), MessagingError> {
-        self.map
-            .values()
-            .try_for_each(|end| end.send(msg.clone()))
+        self.map.values().try_for_each(|end| end.send(msg.clone()))
     }
 }
 
