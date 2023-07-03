@@ -89,8 +89,19 @@ impl<M: Message> MessageSender<M> {
         self.is_active.store(false, Ordering::SeqCst);
     }
 
-    /// Sends message to the queue if the message queue is active.
+    /// Sends message if the message queue is active.
+    /// 
+    /// If the queue is full, this call will block until the send operation can proceed.
     pub fn send(&self, msg: M) -> Result<(), MessagingError> {
+        if !self.is_active() {
+            return Err(MessagingError::QueueNotActive);
+        }
+
+        self.send.send(msg).map_err(|_| MessagingError::QueueClosed)
+    }
+
+    /// Sends message if the message queue is active and not full.
+    pub fn try_send(&self, msg: M) -> Result<(), MessagingError> {
         if !self.is_active() {
             return Err(MessagingError::QueueNotActive);
         }
@@ -160,8 +171,20 @@ impl<M: Message> MessageReceiver<M> {
         self.is_active.store(false, Ordering::SeqCst);
     }
 
-    /// Receives one message if there is any and the message queue is active.
+    /// Receives one message if the message queue is active.
+    /// 
+    /// If there are no messages pending, this call will block
+    /// until the receive operation can proceed.
     pub fn recv(&self) -> Option<M> {
+        if !self.is_active() {
+            return None;
+        }
+
+        self.recv.recv().ok()
+    }
+
+    /// Receives one message if there is any and the message queue is active.
+    pub fn try_recv(&self) -> Option<M> {
         if !self.is_active() {
             return None;
         }
@@ -175,20 +198,20 @@ impl<M: Message> MessageReceiver<M> {
     }
 
     /// Receives one message and forwards it into another queue.
-    pub fn forward_one<N>(&self, next: MessageSender<N>) -> Result<(), MessagingError>
+    pub fn try_forward_one<N>(&self, next: MessageSender<N>) -> Result<(), MessagingError>
     where
         N: Message + From<M>,
     {
-        self.recv().map_or(Ok(()), |msg| next.send(msg.into()))
+        self.try_recv().map_or(Ok(()), |msg| next.try_send(msg.into()))
     }
 
     /// Forwards all pending messages into another queue.
-    pub fn forward<N>(&self, next: MessageSender<N>)
+    pub fn try_forward<N>(&self, next: MessageSender<N>)
     where
         N: Message + From<M>,
     {
         self.iter().for_each(|msg| {
-            let _ = next.send(msg.into());
+            let _ = next.try_send(msg.into());
         });
     }
 }

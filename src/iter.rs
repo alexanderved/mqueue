@@ -11,7 +11,7 @@ impl<M: Message> Iterator for MessageIter<'_, M> {
     type Item = M;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.msg_recv.recv()
+        self.msg_recv.try_recv()
     }
 }
 

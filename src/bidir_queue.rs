@@ -95,14 +95,29 @@ impl<In: Message, Out: Message> MessageEndpoint<In, Out> {
         self.output.deactivate();
     }
 
-    /// Sends message to the queue if the message queue is active.
+    /// Sends message if the message queue is active.
+    /// 
+    /// If the queue is full, this call will block until the send operation can proceed.
     pub fn send(&self, msg: Out) -> Result<(), MessagingError> {
         self.as_sender().send(msg)
     }
 
-    /// Receives one message if there is any and the message queue is active.
+    /// Sends message to the queue if the message queue is active and not full.
+    pub fn try_send(&self, msg: Out) -> Result<(), MessagingError> {
+        self.as_sender().try_send(msg)
+    }
+
+    /// Receives one message if the message queue is active.
+    /// 
+    /// If there are no messages pending, this call will block
+    /// until the receive operation can proceed.
     pub fn recv(&self) -> Option<In> {
         self.input.recv()
+    }
+
+    /// Receives one message if there is any and the message queue is active.
+    pub fn try_recv(&self) -> Option<In> {
+        self.input.try_recv()
     }
 
     /// Returns an iterator which yields all pending messages.
@@ -110,22 +125,25 @@ impl<In: Message, Out: Message> MessageEndpoint<In, Out> {
         self.input.iter()
     }
 
-    /// Receives one message and forwards it into another queue.
-    pub fn forward_one<Any, N>(&self, next: MessageEndpoint<Any, N>) -> Result<(), MessagingError>
+    /// Receives one message and forwards it into another queue if it is not full.
+    pub fn try_forward_one<Any, N>(
+        &self,
+        next: MessageEndpoint<Any, N>,
+    ) -> Result<(), MessagingError>
     where
         Any: Message,
         N: Message + From<In>,
     {
-        self.as_receiver().forward_one(next.as_sender().clone())
+        self.as_receiver().try_forward_one(next.as_sender().clone())
     }
 
-    /// Forwards all pending messages into another queue.
-    pub fn forward<Any, N>(&self, next: MessageEndpoint<Any, N>)
+    /// Forwards all pending messages into another queue if it is not full.
+    pub fn try_forward<Any, N>(&self, next: MessageEndpoint<Any, N>)
     where
         Any: Message,
         N: Message + From<In>,
     {
-        self.as_receiver().forward(next.as_sender().clone());
+        self.as_receiver().try_forward(next.as_sender().clone());
     }
 }
 
@@ -177,9 +195,9 @@ impl<In: Message, Out: Message> MessageEndpoints<In, Out> {
     }
 
     /// Receives one message if there is any.
-    pub fn recv(&self) -> Option<In> {
+    pub fn try_recv(&self) -> Option<In> {
         for end in self.map.values() {
-            if let Some(msg) = end.recv() {
+            if let Some(msg) = end.try_recv() {
                 return Some(msg);
             }
         }
@@ -197,8 +215,19 @@ impl<In: Message, Out: Message> MessageEndpoints<In, Out> {
 
 impl<In: Message, Out: Message + Clone> MessageEndpoints<In, Out> {
     /// Sends the given message to all stored [`MessageEndpoint`]s.
+    /// 
+    /// If any of queues is full, this call will block until the send operation can proceed.
     pub fn send(&self, msg: Out) -> Result<(), MessagingError> {
-        self.map.values().try_for_each(|end| end.send(msg.clone()))
+        self.map
+            .values()
+            .try_for_each(|end| end.send(msg.clone()))
+    }
+
+    /// Tries to send the given message to all stored [`MessageEndpoint`]s.
+    pub fn try_send(&self, msg: Out) -> Result<(), MessagingError> {
+        self.map
+            .values()
+            .try_for_each(|end| end.try_send(msg.clone()))
     }
 }
 
