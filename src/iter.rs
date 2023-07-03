@@ -1,15 +1,5 @@
 use crate::*;
 
-/// An iterator that can be evaluated without performing any extra activity.
-pub trait IteratorRun: Iterator + Sized {
-    /// Runs an iterator.
-    fn run(self) {
-        self.for_each(|_| {});
-    }
-}
-
-impl<I: Iterator> IteratorRun for I {}
-
 /// An iterator which yields messages from one [`MessageReceiver`].
 ///
 /// This `struct` is created by [`MessageReceiver::iter`] or [`MessageEndpoint::iter`].
