@@ -17,6 +17,7 @@ impl<M: Message> Message for std::sync::Arc<M> {}
 #[derive(Debug)]
 pub enum MessagingError {
     QueueClosed,
+    QueueFull,
     QueueNotActive,
 }
 

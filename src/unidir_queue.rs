@@ -4,12 +4,31 @@ use crossbeam_channel::{self, Receiver, Sender};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// Creates a new unidirectional message queue.
+/// Creates a new unbounded unidirectional message queue.
 ///
 /// A unidirectional queue is a queue where there is a flow of messages
 /// which is directed only in one direction, from sender to receiver.
 pub fn unidirectional_queue<M: Message>() -> (MessageSender<M>, MessageReceiver<M>) {
     let (send, recv) = crossbeam_channel::unbounded();
+    let is_active = Arc::new(AtomicBool::new(true));
+
+    let msg_send = MessageSender {
+        send,
+        is_active: Arc::clone(&is_active),
+    };
+    let msg_recv = MessageReceiver { recv, is_active };
+
+    (msg_send, msg_recv)
+}
+
+/// Creates a new bounded unidirectional message queue.
+///
+/// A unidirectional queue is a queue where there is a flow of messages
+/// which is directed only in one direction, from sender to receiver.
+pub fn unidirectional_queue_bounded<M: Message>(
+    cap: usize
+) -> (MessageSender<M>, MessageReceiver<M>) {
+    let (send, recv) = crossbeam_channel::bounded(cap);
     let is_active = Arc::new(AtomicBool::new(true));
 
     let msg_send = MessageSender {
@@ -35,28 +54,31 @@ impl<M: Message> MessageSender<M> {
         QueueId::new(self.is_active.as_ref() as *const _ as usize)
     }
 
-    /// Returns if the [`MessageSender`] is active.
+    /// Returns if the message queue is active.
     pub fn is_active(&self) -> bool {
         self.is_active.load(Ordering::SeqCst)
     }
 
-    /// Activates the [`MessageSender`].
+    /// Activates the message queue.
     pub fn activate(&self) {
         self.is_active.store(true, Ordering::SeqCst);
     }
 
-    /// Deactivates the [`MessageSender`].
+    /// Deactivates the message queue.
     pub fn deactivate(&self) {
         self.is_active.store(false, Ordering::SeqCst);
     }
 
-    /// Sends message to the queue if the [`MessageSender`] is active.
+    /// Sends message to the queue if the message queue is active.
     pub fn send(&self, msg: M) -> Result<(), MessagingError> {
         if !self.is_active() {
             return Err(MessagingError::QueueNotActive);
         }
 
-        self.send.send(msg).map_err(|_| MessagingError::QueueClosed)
+        self.send.try_send(msg).map_err(|err| match err {
+            crossbeam_channel::TrySendError::Disconnected(_) => MessagingError::QueueClosed,
+            crossbeam_channel::TrySendError::Full(_) => MessagingError::QueueFull,
+        })
     }
 }
 
@@ -83,32 +105,23 @@ impl<M: Message> MessageReceiver<M> {
         QueueId::new(self.is_active.as_ref() as *const _ as usize)
     }
 
-    /// Returns if the [`MessageReceiver`] is active.
+    /// Returns if the message queue is active.
     pub fn is_active(&self) -> bool {
         self.is_active.load(Ordering::SeqCst)
     }
 
-    /// Activates the [`MessageReceiver`].
+    /// Activates the message queue.
     pub fn activate(&self) {
         self.is_active.store(true, Ordering::SeqCst);
     }
 
-    /// Deactivates the [`MessageReceiver`].
+    /// Deactivates the message queue.
     pub fn deactivate(&self) {
         self.is_active.store(false, Ordering::SeqCst);
     }
 
-    /// Receives one message if there is any and the [`MessageReceiver`] is active.
-    pub fn recv(&self) -> Option<M> {
-        if !self.is_active() {
-            return None;
-        }
-
-        self.recv.recv().ok()
-    }
-
     /// Receives one message if there is any and the message queue is active.
-    pub fn try_recv(&self) -> Option<M> {
+    pub fn recv(&self) -> Option<M> {
         if !self.is_active() {
             return None;
         }
@@ -122,20 +135,20 @@ impl<M: Message> MessageReceiver<M> {
     }
 
     /// Receives one message and forwards it into another queue.
-    pub fn try_forward_one<N>(&self, next: MessageSender<N>) -> Result<(), MessagingError>
+    pub fn forward_one<N>(&self, next: MessageSender<N>) -> Result<(), MessagingError>
     where
         N: Message + From<M>,
     {
-        self.try_recv().map_or(Ok(()), |msg| next.try_send(msg.into()))
+        self.recv().map_or(Ok(()), |msg| next.send(msg.into()))
     }
 
     /// Forwards all pending messages into another queue.
-    pub fn try_forward<N>(&self, next: MessageSender<N>)
+    pub fn forward<N>(&self, next: MessageSender<N>)
     where
         N: Message + From<M>,
     {
         self.iter().for_each(|msg| {
-            let _ = next.try_send(msg.into());
+            let _ = next.send(msg.into());
         });
     }
 }

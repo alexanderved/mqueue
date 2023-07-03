@@ -2,7 +2,7 @@ use crate::*;
 
 use std::collections::HashMap;
 
-/// Creates a new bidirectional message queue for messages.
+/// Creates a new unbounded bidirectional message queue for messages.
 ///
 /// A bidirectional queue is a queue where there are two flows of messages which are
 /// directed in opposite directions. It lets two objects communicate with each other.
@@ -10,6 +10,30 @@ pub fn bidirectional_queue<A: Message, B: Message>(
 ) -> (MessageEndpoint<A, B>, MessageEndpoint<B, A>) {
     let (send1, recv1) = unidirectional_queue();
     let (mut send2, mut recv2) = unidirectional_queue();
+
+    synchronize_queues_activity((&mut send2, &mut recv2), (&send1, &recv1));
+
+    let end1 = MessageEndpoint {
+        input: recv1,
+        output: send2,
+    };
+    let end2 = MessageEndpoint {
+        input: recv2,
+        output: send1,
+    };
+
+    (end1, end2)
+}
+
+/// Creates a new bounded bidirectional message queue for messages.
+///
+/// A bidirectional queue is a queue where there are two flows of messages which are
+/// directed in opposite directions. It lets two objects communicate with each other.
+pub fn bidirectional_queue_bounded<A: Message, B: Message>(
+    cap: usize,
+) -> (MessageEndpoint<A, B>, MessageEndpoint<B, A>) {
+    let (send1, recv1) = unidirectional_queue_bounded(cap);
+    let (mut send2, mut recv2) = unidirectional_queue_bounded(cap);
 
     synchronize_queues_activity((&mut send2, &mut recv2), (&send1, &recv1));
 
@@ -71,14 +95,9 @@ impl<In: Message, Out: Message> MessageEndpoint<In, Out> {
         self.as_sender().send(msg)
     }
 
-    /// Receives one message if there is any and the [`MessageEndpoint`] is active.
-    pub fn recv(&self) -> Option<In> {
-        self.as_receiver().recv()
-    }
-
     /// Receives one message if there is any and the message queue is active.
-    pub fn try_recv(&self) -> Option<In> {
-        self.input.try_recv()
+    pub fn recv(&self) -> Option<In> {
+        self.input.recv()
     }
 
     /// Returns an iterator which yields all pending messages.
@@ -87,7 +106,7 @@ impl<In: Message, Out: Message> MessageEndpoint<In, Out> {
     }
 
     /// Receives one message and forwards it into another queue if it is not full.
-    pub fn try_forward_one<Any, N>(
+    pub fn forward_one<Any, N>(
         &self,
         next: MessageEndpoint<Any, N>,
     ) -> Result<(), MessagingError>
@@ -95,16 +114,16 @@ impl<In: Message, Out: Message> MessageEndpoint<In, Out> {
         Any: Message,
         N: Message + From<In>,
     {
-        self.as_receiver().try_forward_one(next.as_sender().clone())
+        self.as_receiver().forward_one(next.as_sender().clone())
     }
 
     /// Forwards all pending messages into another queue if it is not full.
-    pub fn try_forward<Any, N>(&self, next: MessageEndpoint<Any, N>)
+    pub fn forward<Any, N>(&self, next: MessageEndpoint<Any, N>)
     where
         Any: Message,
         N: Message + From<In>,
     {
-        self.as_receiver().try_forward(next.as_sender().clone());
+        self.as_receiver().forward(next.as_sender().clone());
     }
 }
 
@@ -156,9 +175,9 @@ impl<In: Message, Out: Message> MessageEndpoints<In, Out> {
     }
 
     /// Receives one message if there is any.
-    pub fn try_recv(&self) -> Option<In> {
+    pub fn recv(&self) -> Option<In> {
         for end in self.map.values() {
-            if let Some(msg) = end.try_recv() {
+            if let Some(msg) = end.recv() {
                 return Some(msg);
             }
         }
