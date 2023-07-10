@@ -9,10 +9,10 @@ pub use iter::*;
 pub use unidir_queue::*;
 
 /// A type which is used for communicating two objects.
-pub trait Message: Send + Sync + 'static {}
+pub trait Message: Send + 'static {}
 
 impl<M: Message> Message for Box<M> {}
-impl<M: Message> Message for std::sync::Arc<M> {}
+impl<M: Message + Sync> Message for std::sync::Arc<M> {}
 
 #[derive(Debug)]
 pub enum MessagingError {
